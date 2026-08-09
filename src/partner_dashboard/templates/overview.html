@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<h1>Overview</h1>
+
+<div class="ops-strip{% if health.stale %} stale{% endif %}">
+    <span class="dot"></span>
+    <span>
+        {% if health.age_minutes is none %}Never synced{% else %}Synced {{ health.age_minutes }} min ago{% endif %}
+        {%- if health.stale %} &middot; expected every {{ health.page_threshold_minutes // 3 }} min{% endif %}
+    </span>
+    <span>{{ health.events_24h }} events ingested in 24h</span>
+    <span>{{ health.shops }} shops on record</span>
+</div>
+
+<div class="cards">
+    {{ ui.stat("installed", stats.installed, compare=comparison.installed) }}
+    {{ ui.stat("active_mrr", "$" ~ "%.2f"|format(stats.active_mrr),
+               compare=comparison.active_mrr) }}
+    {{ ui.stat("paying", stats.paying,
+               extra="/ $" ~ "%.0f"|format(stats.arpu) ~ " ARPU",
+               compare=comparison.paying) }}
+    {{ ui.stat("installs_30d", stats.installs_30d, tone="up",
+               compare=comparison.installs_30d) }}
+    {{ ui.stat("uninstalls_30d", stats.uninstalls_30d, tone="down",
+               compare=comparison.uninstalls_30d) }}
+    {{ ui.stat("net_30d", "$" ~ "%.2f"|format(money.net_30d), extra="net",
+               compare=comparison.net_30d) }}
+</div>
+
+<div class="card">
+    <div class="card-head">
+        <h2 id="mrr">MRR, last {{ months }} months</h2>
+        {#- Governs the three money charts in this card only. The tiles above
+            are states rather than windows, so a range control over them would
+            be a control that does nothing. -#}
+        {{ ui.window_form("months", months, month_choices, "months") }}
+    </div>
+    {% for m in trend %}
+    <div class="bar-row">
+        <span class="bar-label">{% if notes_by_month.get(m.label) %}<i class="anno-dot"
+            title="{{ notes_by_month[m.label]|map(attribute='note')|join(' / ') }}"></i>{% endif %}{{ m.label }}</span>
+        <span class="bar-track"><span class="bar" style="width: {{ 100 * m.mrr / trend_max }}%"></span></span>
+        <span class="bar-val">${{ "%.0f"|format(m.mrr) }}</span>
+    </div>
+    {% else %}
+    <p class="sub">No subscriptions yet. The chart starts at the first conversion.</p>
+    {% endfor %}
+    <p class="sub">Each month is the sum of subscriptions converted by that month's end and not yet
+    churned. Annual plans count at one twelfth of their price.
+    {%- if notes %} A dot marks a month with a <a href="#annotations">note</a>.{% endif %}</p>
+
+    <h2 id="movements">What moved it</h2>
+    <div class="legend">
+        <span><i style="background: var(--mv-new)"></i>New</span>
+        <span><i style="background: var(--mv-reactivation)"></i>Reactivation</span>
+        <span><i style="background: var(--mv-expansion)"></i>Expansion</span>
+        <span><i style="background: var(--mv-contraction)"></i>Contraction</span>
+        <span><i style="background: var(--mv-churned)"></i>Churned</span>
+    </div>
+    {% for m in movements %}
+    <div class="wf-row">
+        <span class="bar-label">{{ m.label }}</span>
+        <span class="wf-track">
+            <span class="wf-neg">
+                {% if m.contraction %}<span class="wf-seg contraction" title="Contraction ${{ "%.0f"|format(-m.contraction) }}" style="width: {{ 100 * -m.contraction / movement_scale }}%"></span>{% endif %}
+                {% if m.churned %}<span class="wf-seg churned" title="Churned ${{ "%.0f"|format(-m.churned) }}" style="width: {{ 100 * -m.churned / movement_scale }}%"></span>{% endif %}
+            </span>
+            <span class="wf-pos">
+                {% if m.new %}<span class="wf-seg new" title="New ${{ "%.0f"|format(m.new) }}" style="width: {{ 100 * m.new / movement_scale }}%"></span>{% endif %}
+                {% if m.reactivation %}<span class="wf-seg reactivation" title="Reactivation ${{ "%.0f"|format(m.reactivation) }}" style="width: {{ 100 * m.reactivation / movement_scale }}%"></span>{% endif %}
+                {% if m.expansion %}<span class="wf-seg expansion" title="Expansion ${{ "%.0f"|format(m.expansion) }}" style="width: {{ 100 * m.expansion / movement_scale }}%"></span>{% endif %}
+            </span>
+        </span>
+        <span class="bar-val">{{ "%+.0f"|format(m.net) }}</span>
+    </div>
+    {% endfor %}
+    <p class="sub">Each bar splits that month's change into its parts, so the five pieces add up to
+    the step in the line above. A shop that paid before, stopped, and came back counts as a
+    reactivation rather than a new customer.</p>
+</div>
+
+<div class="card">
+    <h2 id="collected">Money actually collected</h2>
+    <p class="sub">Everything above this line is MRR: what the current set of subscriptions is worth
+    per month. This is cash: what Shopify billed and what reached the payout. They are different
+    numbers and both are correct. MRR is a projection of a state; this is a record of what moved.</p>
+    <div class="legend">
+        <span><i style="background: var(--gone)"></i>Billed to the merchant</span>
+        <span><i style="background: var(--up)"></i>Reached the payout</span>
+    </div>
+    {% for m in revenue %}
+    <div class="bar-row">
+        <span class="bar-label">{{ m.label }}</span>
+        <span class="bar-pair">
+            <span class="bar-track"><span class="bar gone" style="width: {{ 100 * m.gross / revenue_max }}%"></span></span>
+            <span class="bar-track"><span class="bar" style="width: {{ 100 * m.net / revenue_max }}%"></span></span>
+        </span>
+        <span class="bar-val">${{ "%.0f"|format(m.net) }}</span>
+    </div>
+    {% else %}
+    <p class="sub">No transactions ingested yet.</p>
+    {% endfor %}
+    {% if money.count %}
+    <p class="sub">Across all {{ money.count }} transactions on record, back to
+    {{ money.first_at.strftime("%b %-d, %Y") }}: <strong>${{ "%.2f"|format(money.gross) }}</strong>
+    billed, <strong>${{ "%.2f"|format(money.net) }}</strong> received.
+    Shopify kept <strong>${{ "%.2f"|format(money.taken) }}</strong>, or
+    {{ money.taken_pct }}%.</p>
+    <p class="sub">That is the billing processing fee, not a revenue share. The revenue share is 0%
+    below $1M of lifetime earnings, so it reads $0.00 on most transactions. The fee is also not
+    a flat rate: identically priced charges settle anywhere from 2.9% to 5.9% depending on the merchant,
+    so this figure is measured per transaction rather than calculated from a percentage.</p>
+    {% if money.refund_count %}
+    <p class="sub"><strong>${{ "%.2f"|format(money.refunded) }} went back out</strong> across
+    {{ money.refund_count }} refund{{ "" if money.refund_count == 1 else "s" }} or
+    credit{{ "" if money.refund_count == 1 else "s" }}. These exist only in the transaction feed: no
+    app event is ever emitted for money coming back, so nothing else on this dashboard can see them.
+    The amounts above are already net of them.</p>
+    {% endif %}
+    {% endif %}
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <h2 id="activity">Installs vs uninstalls, last 6 months</h2>
+        <div class="legend">
+            <span><i style="background: var(--up)"></i>Installs</span>
+            <span><i style="background: var(--down)"></i>Uninstalls</span>
+        </div>
+        {% for m in activity %}
+        <div class="bar-row">
+            <span class="bar-label">{% if notes_by_month.get(m.label) %}<i class="anno-dot"
+                title="{{ notes_by_month[m.label]|map(attribute='note')|join(' / ') }}"></i>{% endif %}{{ m.label }}</span>
+            <span class="bar-pair">
+                <span class="bar-track"><span class="bar" style="width: {{ 100 * m.installs / activity_max }}%"></span></span>
+                <span class="bar-track"><span class="bar down" style="width: {{ 100 * m.uninstalls / activity_max }}%"></span></span>
+            </span>
+            <span class="bar-val">{{ "%+d"|format(m.installs - m.uninstalls) }} net</span>
+        </div>
+        {% else %}
+        <p class="sub">No lifecycle events yet. The strip at the top says when the last sync ran.</p>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h2 id="countries">Where customers are</h2>
+        <div class="legend">
+            <span><i style="background: var(--up)"></i>Installed now</span>
+            <span><i style="background: var(--gone)"></i>Ever installed</span>
+        </div>
+        {#- Every row that maps to a filter is a link into it. Most of the
+            drill-downs this page was missing were a missing anchor, not a
+            missing feature: /customers has taken these filters since it
+            shipped. The Other row is the exception and stays plain. -#}
+        {% for c in countries %}
+        <div class="bar-row">
+            <span class="bar-label">{% if c.other %}{{ c.country }}{% else %}<a
+                href="/customers?country={{ c.country|urlencode }}">{{ c.country }}</a>{% endif %}</span>
+            <span class="bar-pair">
+                <span class="bar-track"><span class="bar" style="width: {{ 100 * c.installed / country_max }}%"></span></span>
+                <span class="bar-track"><span class="bar gone" style="width: {{ 100 * c.ever / country_max }}%"></span></span>
+            </span>
+            <span class="bar-val">{{ c.installed }} / {{ c.ever }}</span>
+        </div>
+        {% else %}
+        <p class="sub">No country data. The Partner API does not expose merchant location; backfill it with the CSV importer.</p>
+        {% endfor %}
+        <p class="sub">A country links to those shops on Customers.</p>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <h2 id="plans">Plan mix</h2>
+        {% for p in plans %}
+        <div class="bar-row">
+            <span class="bar-label">{% if p.interval %}<a
+                href="/customers?plan={{ p.interval|urlencode }}">{{ p.label }}</a>{% else %}{{ p.label }}{% endif %}</span>
+            <span class="bar-track"><span class="bar" style="width: {{ 100 * p.mrr / (plans[0].mrr or 1) }}%"></span></span>
+            <span class="bar-val">{{ p.count }} &middot; ${{ "%.0f"|format(p.mrr) }}</span>
+        </div>
+        {% else %}
+        <p class="sub">Nobody is paying yet.</p>
+        {% endfor %}
+        <p class="sub">A plan links to the shops currently on it.</p>
+    </div>
+
+    <div class="card">
+        <h2 id="reasons">Why people leave</h2>
+        {% for r in reasons %}
+        <div class="bar-row">
+            <span class="bar-label"><a
+                href="/reports/churn?bucket={{ r.label|urlencode }}#all">{{ r.label }}</a></span>
+            <span class="bar-track"><span class="bar down" style="width: {{ r.pct }}%"></span></span>
+            <span class="bar-val">{{ r.count }}</span>
+        </div>
+        {% else %}
+        <p class="sub">No uninstall reasons recorded yet.</p>
+        {% endfor %}
+        <p class="sub">Top five, and each one links to the merchants who said it. Full breakdown,
+        timing, and comments on <a href="/reports/churn">Churn</a>.</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 id="annotations">Annotations</h2>
+    <p class="sub">MRR moved in March and this product used to have no way of saying why. A note
+    here marks its month on the charts above, so the reason survives the people who remember it.
+    A note that turned out to be wrong can be deleted. There is no edit: delete it and write it
+    again, which is one line of typing and leaves no half-corrected record behind.</p>
+
+    {% if note_error %}<p class="form-error">{{ note_error }}</p>{% endif %}
+    {% if can_annotate %}
+    <form class="anno-form" method="post" action="/annotations">
+        <input type="date" name="on_date" value="{{ today }}" max="{{ today }}" required
+               aria-label="Date it happened">
+        <input type="text" name="note" maxlength="{{ note_max }}" required
+               placeholder="Raised the price" aria-label="What happened">
+        <button type="submit">Add note</button>
+    </form>
+    {% else %}
+    <p class="sub">Adding a note needs a browser session. This request authenticated some other
+    way.</p>
+    {% endif %}
+
+    {% if notes %}
+    <div class="anno-list">
+        {% for n in notes %}
+        <div class="anno-row">
+            <span class="anno-when">{{ n.on_date.strftime("%b %-d, %Y") }}</span>
+            <span>{{ n.note }}<span class="anno-who">{{ n.author }}</span></span>
+            {% if can_annotate %}
+            {# Two clicks to delete, using a native disclosure: the CSP allows no
+               inline script, so a confirm() dialog would never fire. #}
+            <details class="anno-del">
+                <summary aria-label="Delete this note">Delete</summary>
+                <form method="post" action="/annotations/delete">
+                    <input type="hidden" name="id" value="{{ n.id }}">
+                    <button type="submit">Delete for good</button>
+                </form>
+            </details>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="table-card">
+    <table>
+        <thead><tr><th>Latest activity</th><th>Shop</th><th>When (UTC)</th></tr></thead>
+        <tbody>
+            {% for e in events %}
+            <tr>
+                <td><span class="pill {{ e.type }}">{{ e.type }}</span></td>
+                <td>{{ e.shop }}</td>
+                <td class="sub">{{ e.at.strftime("%b %-d, %H:%M") }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

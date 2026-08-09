@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Churn</h1>
+
+<div class="grid-2">
+    <div class="card">
+        <h2 id="timing">How long before they left</h2>
+        {% for b in timing.buckets %}
+        <div class="bar-row">
+            <span class="bar-label">{{ b.label }}</span>
+            <span class="bar-track"><span class="bar down" style="width: {{ b.pct }}%"></span></span>
+            <span class="bar-val">{{ b.count }}</span>
+        </div>
+        {% else %}
+        <p class="sub">No completed install-to-uninstall spans yet.</p>
+        {% endfor %}
+        {% if timing.median is not none %}
+        <p class="sub">Median time installed before uninstalling: <strong>{{ timing.median }} days</strong>,
+        across {{ timing.count }} shops.</p>
+        {% endif %}
+
+        <h2>Who left</h2>
+        {% for c in composition %}
+        <div class="bar-row">
+            <span class="bar-label">{{ c.label }}</span>
+            <span class="bar-track"><span class="bar gone" style="width: {{ c.pct }}%"></span></span>
+            <span class="bar-val">{{ c.count }} <span class="sub">({{ c.pct }}%)</span></span>
+        </div>
+        {% endfor %}
+
+        <h2>Stores that died, not merchants who left</h2>
+        <p class="sub"><strong>{{ deaths.count }}</strong> of the uninstall events on record are
+        Shopify deactivations: the store closed, paused, or was frozen. Nobody chose to leave and
+        nobody was shown the exit survey, so they are kept out of every number above.</p>
+        {% if deaths.rows %}
+        <div class="legend">
+            {% for d in deaths.rows %}<span>{{ d.shop }} &middot; {{ d.at.strftime("%b %Y") }}</span>{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2 id="reasons">Uninstall reasons</h2>
+        {#- Each bar filters the table below to the merchants who ticked it.
+            The bucket filter is applied in Python, not SQL: the raw column
+            holds the merchant's own words in their own admin language. -#}
+        {% for r in reasons.buckets %}
+        <div class="bar-row">
+            <span class="bar-label"><a href="?bucket={{ r.label|urlencode }}#all">{{ r.label }}</a></span>
+            <span class="bar-track"><span class="bar down" style="width: {{ r.pct }}%"></span></span>
+            <span class="bar-val">{{ r.count }}</span>
+        </div>
+        {% else %}
+        <p class="sub">No uninstall reasons recorded yet.</p>
+        {% endfor %}
+        <p class="sub"><strong>Answering is treated as required from
+        {{ reasons.mandatory_from }} (configured, not reported by Shopify):
+        {{ reasons.era.post.with_reason }} of
+        {{ reasons.era.post.total }} uninstalls ({{ reasons.era.post.coverage_pct }}%) since then
+        gave a reason.</strong> These bars count that era only. Before it the question was
+        optional and just {{ reasons.era.pre.with_reason }} of {{ reasons.era.pre.total }}
+        ({{ reasons.era.pre.coverage_pct }}%) answered, so pooling the two would bury a near-census
+        under a mostly empty denominator. A merchant can pick more than one reason, so the bars
+        total more than the merchants they represent. Reasons arrive in the merchant's own admin
+        language and are grouped here.</p>
+
+        {% if verbatims %}
+        <h2 id="verbatims">In their own words</h2>
+        {% for group in verbatims %}
+        <p class="sub" style="margin-bottom: 4px;"><strong>{{ group.label }}</strong></p>
+        {% for n in group.notes %}
+        <p class="verbatim">{{ n.note }}
+            <span class="sub">&mdash;
+            {%- if n.domain %} <a href="/customers/{{ n.domain }}">{{ n.shop }}</a>
+            {%- else %} {{ n.shop }}{% endif %}, {{ n.at.strftime("%b %Y") }}</span></p>
+        {% endfor %}
+        {% endfor %}
+        <p class="sub">The bars above count which box a merchant ticked; these are what they typed
+        next to it, verbatim and untranslated, newest first. A note is filed under the first reason
+        that merchant selected. Every one of these also appears in the table below, one per row.</p>
+        {% endif %}
+
+        {% if reasons.languages %}
+        <h2>Language the reason was given in</h2>
+        <div class="legend">
+            {% for l in reasons.languages %}<span><i style="background: var(--gone)"></i>{{ l.lang|upper }} &middot; {{ l.count }}</span>{% endfor %}
+        </div>
+        <p class="sub">Shopify serves the uninstall question in the merchant's admin language,
+        which makes this the only per-merchant language signal that exists: neither the Partner
+        API nor any import carries a shop locale. Counted across every answer ever given,
+        not just the mandatory era. Visitor language for the listing itself lives on
+        <a href="/reports/traffic">Traffic</a>.</p>
+        {% endif %}
+    </div>
+</div>
+
+<h1 id="all">Every uninstall</h1>
+<form class="filters" hx-get="/reports/churn" hx-target="#churn-results" hx-select="#churn-results"
+      hx-swap="outerHTML" hx-push-url="true">
+    <select name="paid">
+        <option value="">Paid and never paid</option>
+        <option value="yes" {% if paid == "yes" %}selected{% endif %}>Paid at some point</option>
+        <option value="no" {% if paid == "no" %}selected{% endif %}>Never paid</option>
+    </select>
+    <select name="reason">
+        <option value="">With and without a reason</option>
+        <option value="yes" {% if gave_reason == "yes" %}selected{% endif %}>Gave a reason</option>
+        <option value="no" {% if gave_reason == "no" %}selected{% endif %}>No reason given</option>
+    </select>
+    {#- Every reason bucket on record, not just the top five: the bars above are
+        the mandatory era, and a merchant who answered before it still has a
+        row in this table. -#}
+    <select name="bucket">
+        <option value="">Every reason</option>
+        {% for r in reasons.buckets %}
+        <option value="{{ r.label }}" {% if bucket == r.label %}selected{% endif %}>{{ r.label }}</option>
+        {% endfor %}
+    </select>
+    <select name="days">
+        <option value="">All time</option>
+        {% for d in day_choices %}
+        <option value="{{ d }}" {% if days == d %}selected{% endif %}>Last {{ d }} days</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Filter</button>
+</form>
+<p class="sub">These filter the table only. The bars above are all time by construction, so a
+window here will not move them.</p>
+
+<div id="churn-results">
+<div class="table-card">
+    <table>
+        <thead>
+            <tr>
+                <th>Shop</th>
+                <th>Installed</th>
+                <th>Uninstalled</th>
+                <th class="num">Days</th>
+                <th>Paid</th>
+                <th>Reason</th>
+                <th>What they said</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td>{% if r.domain %}<a href="/customers/{{ r.domain }}">{{ r.shop }}</a>{% else %}{{ r.shop }}{% endif %}<div class="sub">{{ r.domain or "" }}</div></td>
+                <td class="sub">{{ r.installed_at.strftime("%b %-d, %Y") if r.installed_at else "unknown" }}</td>
+                <td class="sub">{{ r.at.strftime("%b %-d, %Y") }}</td>
+                <td class="num">{{ r.days if r.days is not none else "" }}</td>
+                <td>{% if r.paid %}<span class="pill paid">${{ "%.0f"|format(r.monthly_amount) }}/mo</span>{% else %}<span class="sub">never</span>{% endif %}</td>
+                <td class="sub">{{ r.buckets|join(", ") }}</td>
+                <td>{{ r.note or "" }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">No uninstalls match these filters. Widen the dates, or clear the reason.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p class="sub">{{ rows|length }} uninstall{{ "" if rows|length == 1 else "s" }} shown, newest
+first. Merchants who chose to leave only; stores Shopify closed or froze are counted below.
+Free-text notes are verbatim and untranslated.</p>
+</div>
+{% endblock %}

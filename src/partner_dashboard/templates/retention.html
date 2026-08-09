@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% macro cohort_grid(data, unit, empty) %}
+<div class="table-card" style="padding: 6px 0;">
+    <table>
+        <thead>
+            <tr>
+                <th>Cohort</th>
+                <th class="num">{{ unit }}</th>
+                {% for m in range(data.max_offset + 1) %}<th class="num">M{{ m }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in data.cohorts %}
+            <tr>
+                <td style="font-family: var(--mono); font-size: 13px;">{{ c.label }}</td>
+                <td class="num">{{ c.size }}</td>
+                {% for pct in c.cells %}
+                <td class="num" style="padding: 4px 5px;">
+                    <div class="heat{% if pct > 55 %} hot{% endif %}" style="background: rgb(var(--heat-rgb) / {{ "%.2f"|format(pct / 125) }})">{{ pct }}%</div>
+                </td>
+                {% endfor %}
+                {% for _ in range(data.max_offset - c.cells|length + 1) %}<td></td>{% endfor %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ data.max_offset + 3 }}" class="sub">{{ empty }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+{% block content %}
+<h1 id="installed">Installed retention</h1>
+{{ cohort_grid(installs, "Shops", "No installs yet.") }}
+<p class="sub">Each row is the month a shop first installed; each cell is the share of that cohort
+still installed N months later. This is the leaky bucket: it counts everyone who ever installed,
+not just the ones who paid. A shop that uninstalled and came back counts as retained.</p>
+
+<h1 id="paying">Paying retention</h1>
+{{ cohort_grid(retention, "Subs", "No subscriptions yet.") }}
+<p class="sub">Each row is the month a subscription started; each cell is the share of that cohort
+still subscribed N months later. Cells only appear once a cohort is old enough to observe.</p>
+{% endblock %}

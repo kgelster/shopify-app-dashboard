@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ shop.shop_name or shop.shop_domain }}</h1>
+<p class="sub">
+    {{ shop.shop_domain }}
+    {%- if shop.country %} &middot; {{ shop.country }}{% endif %}
+    {%- if shop.industry %} &middot; {{ shop.industry }}{% endif %}
+    &middot; <a href="https://{{ shop.shop_domain }}">storefront</a>
+    &middot; <a href="/customers">back to all customers</a>
+</p>
+
+<div class="cards">
+    <div class="card stat">
+        <div class="label">State</div>
+        <div class="num"><span class="pill {{ current_state }}">{{ current_state }}</span></div>
+    </div>
+    <div class="card stat">
+        <div class="label">Paid to date</div>
+        <div class="num">${{ "%.2f"|format(money.net) }}<small>&nbsp;net</small></div>
+    </div>
+    <div class="card stat">
+        <div class="label">Billed</div>
+        <div class="num">${{ "%.2f"|format(money.gross) }}</div>
+        <div class="sub">${{ "%.2f"|format(money.taken) }} kept by Shopify</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Current plan</div>
+        {% if subscription and not subscription.churned_at %}
+        {% if subscription.plan_interval == "ANNUAL" %}
+        {# Derived, not the sticker price: if the annual plan is ever
+           repriced this keeps matching what the merchant actually pays. #}
+        <div class="num">${{ "%.0f"|format(subscription.monthly_amount * 12) }}<small>&nbsp;a year</small></div>
+        <div class="sub">${{ "%.2f"|format(subscription.monthly_amount) }} a month in MRR</div>
+        {% else %}
+        <div class="num">${{ "%.0f"|format(subscription.monthly_amount) }}<small>&nbsp;/mo</small></div>
+        {% endif %}
+        {% else %}
+        <div class="num"><small>{{ "Cancelled" if subscription else "Never subscribed" }}</small></div>
+        {% endif %}
+    </div>
+    <div class="card stat">
+        <div class="label">First installed</div>
+        <div class="num"><small>{{ first_install_at.strftime("%b %-d, %Y") if first_install_at else "unknown" }}</small></div>
+    </div>
+    <div class="card stat">
+        <div class="label">Payments</div>
+        <div class="num">{{ money.count }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 id="timeline">Everything that happened</h2>
+    {% if install_count > 1 %}
+    <p class="sub">This merchant installed {{ install_count }} times. The rows below are in strict
+    time order and the state above is read off the last one of them, so the header and the timeline
+    cannot tell different stories about a merchant who came back.</p>
+    {% endif %}
+    <div class="tl">
+        {% for t in timeline %}
+        <div class="tl-row">
+            <span class="tl-when">{{ t.at.strftime("%b %-d, %Y") }}</span>
+            <span class="tl-rail"><span class="tl-dot {{ t.kind }}"></span></span>
+            <span class="tl-what">
+                {{ t.label }}
+                {%- if t.amount %} <span class="sub">${{ "%.0f"|format(t.amount) }}{% if t.interval == "ANNUAL" %} a year{% else %} every 30 days{% endif %}</span>{% endif %}
+                {%- if t.reason %}<span class="sub">Reason given: {{ t.reason }}</span>{% endif %}
+                {%- if t.note %}<p class="verbatim">{{ t.note }}</p>{% endif %}
+            </span>
+        </div>
+        {% else %}
+        <p class="sub">No lifecycle events on record for this shop.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card">
+    <h2 id="payments">Payments</h2>
+    {% if payments %}
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Kind</th>
+                    <th class="num">Billed</th>
+                    <th class="num">Shopify kept</th>
+                    <th class="num">Received</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in payments %}
+                <tr>
+                    <td class="sub">{{ p.at.strftime("%b %-d, %Y") }}</td>
+                    <td>{{ p.type }}{% if p.interval == "ANNUAL" %} <span class="sub">annual</span>{% endif %}</td>
+                    <td class="num">{{ "%.2f"|format(p.gross) if p.gross is not none else "" }}</td>
+                    <td class="num">{{ "%.2f"|format(p.gross - p.net) if p.gross is not none and p.net is not none else "" }}</td>
+                    <td class="num">{{ "%.2f"|format(p.net) if p.net is not none else "" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="sub">Newest first, from the Partner API transaction feed.
+    <strong>Shopify kept</strong> is billed minus received: the billing processing fee, which is not
+    a flat rate and is read per transaction rather than calculated. A negative row is a refund,
+    credit or adjustment, and those exist only in this feed.</p>
+    {% else %}
+    <p class="sub">No transactions on record for this shop. Either it never paid, or every charge it
+    made predates the transaction feed backfill.</p>
+    {% endif %}
+</div>
+
+{% if usage %}
+<div class="card">
+    <h2 id="usage">What they actually did</h2>
+    <div class="table-card">
+        <table>
+            <thead><tr><th>Event</th><th class="num">Count</th><th>First</th><th>Last</th></tr></thead>
+            <tbody>
+                {% for u in usage %}
+                <tr>
+                    <td>{{ u.event_type }}</td>
+                    <td class="num">{{ u.count }}</td>
+                    <td class="sub">{{ u.first_at.strftime("%b %-d, %Y") }}</td>
+                    <td class="sub">{{ u.last_at.strftime("%b %-d, %Y") }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="sub">Reported by {{ APP_NAME }} itself. The Partner API carries no product usage
+    at all, so a shop with nothing here either predates tracking or was never set up.</p>
+</div>
+{% endif %}
+{% endblock %}

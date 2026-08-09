@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ DASHBOARD_NAME }}{% endblock %}</title>
+    <meta name="color-scheme" content="light dark">
+    <!-- Every page is behind auth, but the login screen and the error pages
+         are reachable without it, so they are the ones a crawler could index.
+         The X-Robots-Tag header in security.py covers the .md twins, which
+         have no <head> to put this in. -->
+    <meta name="robots" content="noindex, nofollow">
+    <!-- The wordmark's mark, inline so the tab icon costs no request. -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='9' width='10' height='10' rx='2.5' fill='%238F76FF' transform='rotate(14 7 14)'/><rect x='11' y='16' width='10' height='10' rx='2.5' fill='%23FF9C5B' transform='rotate(-18 16 21)'/><rect x='19' y='5' width='10' height='10' rx='2.5' fill='%234ED39A' transform='rotate(31 24 10)'/></svg>">
+    <!-- Pinned and hash-checked: the browser refuses the file if unpkg ever
+         serves bytes other than htmx 1.9.12, so a compromised CDN cannot run
+         script on a dashboard that has every merchant's data on it. -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"
+            integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
+            crossorigin="anonymous"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #211A2E;
+            --ink-2: #5C566B;
+            --muted: #8B8598;
+            --surface: #FCFCFB;
+            --card: #FFFFFF;
+            --border: #E7E4EF;
+            --brand: #6C4BF4;
+            --brand-soft: #EFEBFE;
+            --up: #6C4BF4;      /* installs  */
+            --down: #E8590C;    /* uninstalls */
+            --ok: #188A52;
+            --ok-soft: #E3F4EB;
+            --gone-soft: #F1EFF4;
+            /* Context bars (the all-time figure behind a live one). Deliberately
+               neutral, and dark enough to clear 3:1 against the surface. */
+            --gone: #8B8598;
+            --nav: #211A2E;
+            --row-hover: #F7F5FC;
+            --brand-hover: #5B3CE0;
+            --heat-rgb: 108 75 244;   /* retention cells, alpha carries the value */
+            --heat-ink: #FFFFFF;      /* text once a cell is dark enough to need it */
+            --on-brand: #FFFFFF;      /* text on a brand-filled button */
+            /* MRR movement buckets. Five hues, ordered here exactly as they
+               stack in the waterfall (contraction | churned || new |
+               reactivation | expansion) and validated in that order against a
+               white surface: every adjacent pair clears the CVD and
+               normal-vision separation floors and 3:1 contrast. Re-run the
+               check before changing any of them. */
+            --mv-contraction: #C2185B;
+            --mv-churned: #E8590C;
+            --mv-new: #6C4BF4;
+            --mv-reactivation: #188A52;
+            --mv-expansion: #1B6FD4;
+            --display: "Bricolage Grotesque", system-ui, sans-serif;
+            --mono: "IBM Plex Mono", ui-monospace, monospace;
+            --body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* Dark mode follows the OS; there is no in-app toggle. Only the colour
+           tokens are redefined. The chart hues are re-stepped rather than
+           inverted: #6C4BF4 and #E8590C are tuned for a near-white surface and
+           go muddy on a dark one. */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --ink: #F3F0F9;
+                --ink-2: #BAB3C9;
+                --muted: #918AA4;
+                --surface: #14111C;
+                --card: #1D1829;
+                --border: #2F2942;
+                --brand: #9B85FF;
+                --brand-soft: #2C2350;
+                --up: #9B85FF;
+                --down: #FF8A4C;
+                --ok: #4FC98A;
+                --ok-soft: #17301F;
+                --gone-soft: #272134;
+                --gone: #918AA4;
+                --nav: #0D0A14;
+                --row-hover: #241E33;
+                --brand-hover: #AD9BFF;
+                --heat-rgb: 155 133 255;
+                --heat-ink: #14111C;
+                --on-brand: #14111C;
+                /* Re-stepped for the dark card, not inverted. Contraction is a
+                   lighter pink here because #C2185B and #FF8A4C sit too close
+                   together once both are lifted for a dark surface. */
+                --mv-contraction: #FF7ACF;
+                --mv-churned: #FF8A4C;
+                --mv-new: #9B85FF;
+                --mv-reactivation: #4FC98A;
+                --mv-expansion: #63A9F0;
+            }
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; background: var(--surface); color: var(--ink);
+            font: 15px/1.5 var(--body);
+            display: flex; align-items: flex-start;
+        }
+        /* Seven pages, a button and an identity do not fit a 56px top bar; the
+           old one ran out of room and the email ate a third of it. A column has
+           as much vertical space as it needs and the page keeps its full
+           height for content. */
+        .sidebar {
+            position: sticky; top: 0; flex: none; width: 212px; height: 100vh;
+            background: var(--nav); color: #fff;
+            display: flex; flex-direction: column; gap: 22px;
+            padding: 20px 14px; overflow-y: auto;
+        }
+        /* min-width: 0 or a wide table stretches this column instead of
+           scrolling inside its own .table-card. */
+        .content { flex: 1; min-width: 0; }
+
+        /* The unauthenticated shell: login, and the errors a signed-out
+           visitor can reach. Same tokens and same footer as the app, minus the
+           sidebar, because a nav full of links you cannot follow is worse than
+           no nav. Pages opt in by emptying the `sidebar` block. */
+        .gate {
+            max-width: 580px; margin: 8vh auto 0; padding: 0 24px 40px;
+            text-align: center;
+        }
+        .gate .wordmark {
+            color: var(--ink); justify-content: center; font-size: 21px;
+            padding: 0; margin-bottom: 26px;
+        }
+        .gate h1 { font-size: 25px; margin: 0 0 10px; }
+        .gate p { color: var(--ink-2); margin: 0 0 16px; }
+        .gate .art {
+            /* Landscape: these are wide city scenes, and squeezing one into a
+               square box wastes the composition. Source is far larger than the
+               box on every display, so the browser's smooth downscale is the
+               right filter; `pixelated` would alias the art into moire. */
+            width: 100%; max-width: 460px; height: auto; margin: 0 auto 26px;
+            display: block; border-radius: 12px;
+        }
+        .gate .btn {
+            display: inline-flex; align-items: center; gap: 9px;
+            background: var(--brand); color: #fff; text-decoration: none;
+            font-weight: 600; font-size: 14.5px;
+            padding: 11px 18px; border-radius: 9px;
+        }
+        .gate .btn:hover { background: var(--brand-hover); }
+        .gate .fineprint { font-size: 12.5px; color: var(--muted); margin-top: 22px; }
+        /* Two lines in the column: "<App Name> Analytics" set on one line
+           does not fit 212px at 17px and was clipping mid-word. */
+        .wordmark {
+            font-family: var(--display); font-weight: 800; font-size: 17px;
+            color: #fff; text-decoration: none; letter-spacing: .01em;
+            display: flex; align-items: flex-start; gap: 9px; padding: 2px 10px 0;
+            line-height: 1.25;
+        }
+        .wordmark .confetti { padding-top: 5px; }
+        .wordmark small { font-weight: 600; opacity: .55; display: block; }
+        .confetti { display: inline-flex; gap: 3px; }
+        .confetti i { width: 7px; height: 7px; border-radius: 1.5px; display: inline-block; }
+        .confetti i:nth-child(1) { background: #8F76FF; transform: rotate(14deg); }
+        .confetti i:nth-child(2) { background: #FF9C5B; transform: rotate(-18deg) translateY(3px); }
+        .confetti i:nth-child(3) { background: #4ED39A; transform: rotate(31deg) translateY(-2px); }
+        .side-top { display: flex; align-items: flex-start; gap: 8px; }
+        .side-top .wordmark { flex: 1; min-width: 0; }
+        /* Only ever visible in the collapsed layout, and only once the script
+           has confirmed it can hide the nav it toggles. */
+        .hamburger {
+            display: none; flex: none; background: none; border: 0; padding: 6px;
+            color: #BDB6CE; cursor: pointer; border-radius: 7px;
+        }
+        .hamburger:hover { color: #fff; background: rgba(255, 255, 255, .06); }
+
+        .sidebar nav { display: flex; flex-direction: column; gap: 1px; }
+        .sidebar nav a {
+            color: #BDB6CE; text-decoration: none; font-size: 14px; font-weight: 500;
+            padding: 7px 10px; border-radius: 7px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        /* The icon is a second read of the label, not a replacement for it, so
+           it is decorative and the text always ships beside it. */
+        .sidebar nav svg { flex: none; opacity: .75; }
+        .sidebar nav a:hover { color: #fff; background: rgba(255, 255, 255, .06); }
+        .sidebar nav a:hover svg { opacity: 1; }
+        .sidebar nav a[aria-current="page"] {
+            color: #fff; background: rgba(255, 255, 255, .09);
+            box-shadow: inset 3px 0 0 var(--brand);
+        }
+        .sidebar nav a[aria-current="page"] svg { opacity: 1; color: var(--brand); }
+
+        /* Sub-sections of the page you are on. Indented to the icon column so
+           they read as children of the row above rather than as more pages. */
+        .subnav { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px; }
+        .sidebar nav .subnav a {
+            font-size: 13px; font-weight: 400; color: #948DA8;
+            padding: 5px 10px 5px 37px;
+        }
+        .sidebar nav .subnav a:hover { color: #fff; }
+
+        /* Account menu. margin-top: auto pins it to the bottom of the column on
+           a tall window and lets it sit right under the links on a short one.
+           A <details> rather than a scripted popover: it opens without JS, it
+           is keyboard-operable for free, and there is no state it can get
+           stuck closed in. */
+        /* Sits under the nav links rather than above the account row: the
+           panel flows inline, so opening it at the bottom of the column would
+           push the account row out of view. Here it expands into the empty
+           space the column already has. */
+        .help { position: relative; }
+        .acct { margin-top: auto; position: relative; padding-top: 12px;
+                border-top: 1px solid #2E2840; }
+        .acct summary, .help summary {
+            list-style: none; cursor: pointer; border-radius: 7px;
+            display: flex; align-items: center; gap: 9px; padding: 6px 10px;
+            color: #BDB6CE; font-size: 13px;
+        }
+        .acct summary::-webkit-details-marker,
+        .help summary::-webkit-details-marker { display: none; }
+        .acct summary:hover, .help summary:hover {
+            color: #fff; background: rgba(255, 255, 255, .06);
+        }
+        .help summary .who { flex: 1; text-align: left; }
+        .help[open] .caret { transform: rotate(180deg); }
+        /* Flows inside the column rather than hanging out of it. The account
+           menu can be a popover because it is 190px of menu rows that fit the
+           column's width; this is six sentences, and any wider card gets
+           clipped by the sidebar's own overflow-y: auto -- the same trap that
+           silently ate the hamburger menu (see the note in the media query
+           below). Opening it scrolls the column instead. */
+        .help-menu {
+            margin: 4px 2px 0; padding: 10px 11px;
+            background: rgba(255, 255, 255, .05);
+            border: 1px solid #2E2840; border-radius: 9px;
+        }
+        .help-menu p {
+            margin: 0 0 9px; font: 400 12px/1.5 var(--body); color: #BDB6CE;
+        }
+        .help-menu p:last-child { margin-bottom: 0; }
+        .help-menu strong { color: #fff; font-weight: 600; }
+        /* main a is scoped to the page body, so a link in the column needs its
+           own treatment or it renders as browser blue on the dark surface. */
+        .help-menu a { color: #C6B8FF; }
+        .help-menu code {
+            font: 500 11px var(--mono); background: rgba(255, 255, 255, .08);
+            padding: 1px 4px; border-radius: 4px; color: #E4DFF0;
+            overflow-wrap: anywhere;
+        }
+        .avatar {
+            flex: none; width: 24px; height: 24px; border-radius: 50%;
+            background: var(--brand); color: #fff;
+            display: grid; place-items: center;
+            font: 600 12px var(--body); text-transform: uppercase;
+        }
+        .acct .who {
+            flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; text-align: left;
+        }
+        .acct .caret { flex: none; opacity: .7; }
+        .acct[open] .caret { transform: rotate(180deg); }
+        /* Opens upward: the trigger is at the bottom of the column, so a menu
+           flowing downward would land off screen. */
+        .acct-menu {
+            position: absolute; bottom: calc(100% - 6px); left: 0; right: 0;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 6px; z-index: 5;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, .28);
+            display: grid; gap: 2px;
+        }
+        .acct-menu a {
+            font: 500 13px var(--body); color: var(--ink); border-radius: 7px;
+            padding: 8px 10px; text-decoration: none;
+            display: flex; align-items: center; gap: 9px;
+        }
+        .acct-menu a:hover { background: var(--row-hover); }
+        .acct-menu .sub { padding: 6px 10px 8px; }
+
+        /* Under ~900px the column costs more than it gives, so it folds into a
+           bar and the links go behind the hamburger. The .js gate matters: with
+           no script the nav is never hidden, so the page still navigates. */
+        @media (max-width: 900px) {
+            body { display: block; }
+            .sidebar {
+                position: relative; width: auto; height: auto;
+                flex-direction: row; align-items: center; flex-wrap: wrap;
+                gap: 6px 16px; padding: 12px 16px;
+                /* The column's overflow-y: auto has to go here: it clips any
+                   popover that hangs below the bar, which silently ate the
+                   whole hamburger menu. */
+                overflow: visible;
+            }
+            .side-top { flex: 1; align-items: center; }
+            .sidebar nav { flex-basis: 100%; }
+            .acct, .help { margin: 0; padding: 0; border-top: 0; }
+            .acct-menu { bottom: auto; top: calc(100% + 4px); left: auto; width: 190px; }
+            /* In the bar layout the sidebar is full width, so the panel just
+               takes the row below the controls. */
+            .help { flex-basis: 100%; }
+            .js .hamburger { display: inline-flex; }
+            .js .sidebar nav { display: none; }
+            /* Anchored under the hamburger rather than left in the flow: as a
+               wrapped flex item the opened list reflowed the bar around itself
+               and landed above the wordmark. */
+            .js .sidebar nav.open {
+                display: flex; position: absolute; top: 100%; right: 16px;
+                width: 240px; padding: 6px; z-index: 6;
+                background: var(--card); border: 1px solid var(--border);
+                border-radius: 10px; box-shadow: 0 12px 28px rgba(0, 0, 0, .28);
+            }
+            /* On the popover the rows sit on a card, not on the dark bar. */
+            .js .sidebar nav.open a { color: var(--ink); }
+            .js .sidebar nav.open a:hover { background: var(--row-hover); }
+            .js .sidebar nav.open a[aria-current="page"] {
+                background: var(--brand-soft); color: var(--brand); box-shadow: none;
+            }
+        }
+        main { max-width: 1240px; margin: 0 auto; padding: 28px 28px 48px; }
+        /* One vertical rhythm for the whole page: every direct child of main
+           sits 16px below the previous one, exactly matching the 16px grid
+           gaps, so section spacing and card spacing are the same unit.
+           Headings opt out with their own larger margins below. */
+        main > * + * { margin-top: 16px; }
+        /* Sub-nav links jump to these; without it the heading lands flush
+           against the top edge of the viewport. */
+        h1[id], h2[id] { scroll-margin-top: 20px; }
+        /* The float is the first child, so the rhythm rule would push the page
+           title 16px down and out of line with the button beside it. */
+        /* margin-top centres the button on the h1 beside it: the title's own
+           10px margin plus half the difference in their heights. */
+        /* Flex because Overview carries two controls and every other page one. */
+        .page-head {
+            float: right; margin: 9px 0 0 20px;
+            display: flex; gap: 8px; align-items: center;
+        }
+        main > .page-head + h1 { margin-top: 10px; }
+        @media (max-width: 620px) { .page-head { float: none; margin: 0 0 12px; } }
+        h1 { font-family: var(--display); font-weight: 800; font-size: 26px; margin: 10px 0 20px; }
+        main > h1:not(:first-child) { margin-top: 44px; }
+        h2 { font-family: var(--display); font-weight: 600; font-size: 16px; margin: 0 0 12px; }
+        .card h2:not(:first-child) { margin-top: 24px; }
+        /* Six overview tiles across when there is room for them: 6 tiles plus
+           5x16px gaps needs 1160px, which after main's 2x28px padding and the
+           212px sidebar wants a ~1430px window. Narrower than that they wrap,
+           which is why the tile is sized by a minimum rather than a count. */
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+        .card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 18px 20px;
+        }
+        .stat .label {
+            font-size: 13px; color: var(--ink-2); margin-bottom: 6px;
+            display: flex; align-items: center; gap: 5px;
+        }
+        /* 28px mono keeps a 4-digit MRR inside a 184px tile; 32px did not. */
+        .stat .num { font-family: var(--mono); font-weight: 600; font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; }
+        .stat .num small { font-size: 14px; color: var(--muted); font-weight: 500; }
+        .stat.up .num { color: var(--up); }
+        .stat.down .num { color: var(--down); }
+
+        /* What the number was, under the number it is. A bare figure is a fact;
+           a figure with its own past is a signal, which is the entire reason
+           this exists. Neutral by default: only a metric that declares which
+           direction is good news gets a colour. */
+        .delta {
+            margin-top: 5px; font-size: 12.5px; color: var(--muted);
+            display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+        }
+        .delta-num { font-family: var(--mono); font-weight: 600; }
+        .delta.good .delta-num { color: var(--ok); }
+        .delta.bad .delta-num { color: var(--down); }
+
+        /* The definition, next to the number rather than in a doc nobody opens.
+           Absolutely positioned so opening one does not reflow the tile row. */
+        .defn { position: relative; display: inline-flex; }
+        .defn summary {
+            list-style: none; cursor: pointer; display: inline-flex;
+            color: var(--muted); border-radius: 50%; padding: 1px;
+        }
+        .defn summary::-webkit-details-marker { display: none; }
+        .defn summary:hover, .defn[open] summary { color: var(--brand); }
+        .defn-card {
+            position: absolute; top: calc(100% + 6px); left: -6px; width: 264px;
+            z-index: 20; padding: 11px 13px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; box-shadow: 0 12px 28px rgba(0, 0, 0, .22);
+        }
+        .defn-card p { margin: 0 0 7px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+        .defn-card p:last-child { margin-bottom: 0; }
+        .defn-name { font-weight: 600; color: var(--ink) !important; }
+        .defn-rule { font-family: var(--mono); font-size: 11.5px !important; }
+        .defn-src { color: var(--muted) !important; font-size: 11.5px !important; }
+        /* On a narrow screen the tile is near the right edge and a panel
+           anchored left runs off it. */
+        @media (max-width: 620px) { .defn-card { left: auto; right: -6px; } }
+
+        /* Annotations: why a number moved, written down. A marker in the chart
+           label, and the note itself in a list under the chart. */
+        .anno-dot {
+            display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--brand); margin-right: 5px; vertical-align: middle;
+        }
+        .anno-list { display: grid; gap: 0; margin-top: 4px; }
+        .anno-row {
+            display: grid; grid-template-columns: 92px 1fr auto; gap: 12px;
+            padding: 8px 0; border-top: 1px solid var(--border); font-size: 13.5px;
+        }
+        /* Delete stays quiet until asked for: the note is what the reader came
+           to read, and this is the one control here that loses something. */
+        .anno-del summary {
+            list-style: none; cursor: pointer; color: var(--muted);
+            font-size: 12px; text-align: right;
+        }
+        .anno-del summary::-webkit-details-marker { display: none; }
+        .anno-del summary:hover { color: var(--down); }
+        .anno-del[open] summary { color: var(--down); }
+        .anno-del button {
+            margin-top: 6px; font: 12px var(--body); color: var(--down);
+            background: var(--card); border: 1px solid var(--down);
+            border-radius: 6px; padding: 4px 8px; cursor: pointer;
+        }
+        .anno-row:first-child { border-top: 0; }
+        .anno-when { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+        .anno-who { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; }
+        .anno-form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        .anno-form input[type="text"], .anno-form input[type="date"] {
+            font: 14px var(--body); color: var(--ink);
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: 8px 10px; background: var(--card);
+        }
+        .anno-form input[type="text"] { flex: 1; min-width: 240px; }
+        .form-error { color: var(--down); font-size: 13px; margin: 8px 0 0; }
+        /* Range pickers sit at the top right of the card they govern, so it is
+           never ambiguous which numbers they change. */
+        .card-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; flex-wrap: wrap; margin-bottom: 12px;
+        }
+        .card-head h2 { margin: 0; }
+        .filters.range select, .filters.range button { font-size: 13px; padding: 6px 10px; }
+        /* minmax(0, 1fr), not 1fr: a plain 1fr floors at the column's min-content
+           width, so one card holding a long unbreakable run (a shop-name legend)
+           steals width from the other and the two stop being halves. */
+        .grid-2 {
+            display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 16px; align-items: start;
+        }
+        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        table { border-collapse: collapse; width: 100%; font-size: 14px; }
+        th {
+            text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+            color: var(--muted); font-weight: 600; padding: 10px 12px;
+            border-bottom: 1px solid var(--border); white-space: nowrap;
+        }
+        td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+        tbody tr:hover { background: var(--row-hover); }
+        td.num, th.num { text-align: right; font-family: var(--mono); }
+        /* Links in page content. Scoped to main so the sidebar and account menu
+           keep their own treatment. Without this a shop name linking to its
+           detail page renders as default browser blue, which fails contrast on
+           the dark surface and does not match anything else on the page. */
+        main a { color: var(--brand); text-decoration: none; }
+        main a:hover { text-decoration: underline; }
+        .table-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow-x: auto; }
+        .sub { color: var(--muted); font-size: 13px; }
+
+        .pill {
+            display: inline-block; padding: 2px 9px; border-radius: 99px;
+            font-size: 12px; font-weight: 600;
+        }
+        .pill.installed { background: var(--ok-soft); color: var(--ok); }
+        .pill.uninstalled { background: var(--gone-soft); color: var(--muted); }
+        .pill.reinstalled { background: var(--brand-soft); color: var(--brand); }
+        .pill.paid { background: var(--ok-soft); color: var(--ok); font-family: var(--mono); }
+
+        form.filters { display: flex; gap: 10px; flex-wrap: wrap; }
+        select, input[type="search"] {
+            font: 14px var(--body); color: var(--ink);
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: 8px 10px; background: var(--card);
+        }
+        input[type="search"] { min-width: 260px; }
+        /* Read-only block for lists meant to be selected and pasted elsewhere. */
+        .copyable {
+            width: 100%; font: 13px var(--mono); color: var(--ink-2);
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 10px 12px; resize: vertical;
+        }
+        button {
+            font: 600 14px var(--body); color: var(--on-brand); background: var(--brand);
+            border: 0; border-radius: 8px; padding: 8px 16px; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 7px;
+        }
+        button:hover { background: var(--brand-hover); }
+        /* Page-header action: reads as a control, not as the page's primary
+           button. Sits on the page surface now rather than on the dark bar, so
+           it wears the page tokens. */
+        /* Not `button.ghost`: the Download JSON control is an <a download>, so
+           the browser writes the file with no script involved. Both wear the
+           same clothes because they are the same kind of thing to a reader. */
+        .ghost {
+            background: var(--card); color: var(--ink-2); border: 1px solid var(--border);
+            font: 500 13px var(--body); border-radius: 8px; padding: 6px 12px;
+            cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+            text-decoration: none;
+        }
+        .ghost:hover {
+            background: var(--row-hover); color: var(--ink); border-color: var(--muted);
+        }
+        :focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+        /* Table pager. Sits inside the HTMX-swapped results block, so it keeps
+           its own top margin rather than relying on main's rhythm rule. */
+        .pager {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; margin-top: 12px; flex-wrap: wrap;
+        }
+        .pager-links { display: flex; align-items: center; gap: 16px; font-size: 13px; }
+        .pager a { color: var(--brand); text-decoration: none; font-weight: 600; cursor: pointer; }
+        .pager a:hover { text-decoration: underline; }
+        .pager .disabled { color: var(--muted); font-size: 13px; font-weight: 600; }
+
+        /* horizontal bars (funnel + monthly activity) */
+        /* The label column has to hold the longest uninstall-reason bucket
+           ("Limited or missing features") without the bar riding over it. */
+        .bar-row { display: grid; grid-template-columns: 172px 1fr 92px; gap: 12px; align-items: center; padding: 7px 0; }
+        .bar-label {
+            font-size: 13px; color: var(--ink-2); white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis;
+        }
+        @media (max-width: 620px) { .bar-row { grid-template-columns: 120px 1fr 80px; } }
+        .bar-track { background: none; height: 22px; display: flex; align-items: center; }
+        .bar {
+            height: 18px; border-radius: 0 4px 4px 0; background: var(--brand); min-width: 2px;
+        }
+        .bar.down { background: var(--down); }
+        .bar.gone { background: var(--gone); }
+        .bar-val { font-family: var(--mono); font-size: 13px; }
+        .bar-pair { display: grid; gap: 2px; }
+        /* Wraps rather than squeezing: the store-deaths list is a run of shop
+           names, and without this each one broke over three lines. */
+        .legend {
+            display: flex; flex-wrap: wrap; gap: 6px 18px;
+            font-size: 13px; color: var(--ink-2); margin-bottom: 10px;
+        }
+        .legend > span { white-space: nowrap; }
+        .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 6px; }
+
+        /* Pipeline health. Quiet when everything is fine; the whole point is
+           that a stalled sync looks identical to a quiet week on the charts. */
+        .ops-strip {
+            display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+            font-size: 13px; color: var(--ink-2);
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 10px 16px;
+        }
+        .ops-strip .dot {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--ok);
+            flex: none;
+        }
+        .ops-strip.stale { border-color: var(--down); color: var(--down); }
+        .ops-strip.stale .dot { background: var(--down); }
+
+        /* MRR movement waterfall: one row per month, zero axis down the middle.
+           Sign is carried by which side of the axis a segment sits on, so the
+           colours only have to separate the five movement kinds. */
+        .wf-row { display: grid; grid-template-columns: 172px 1fr 92px; gap: 12px; align-items: center; padding: 5px 0; }
+        .wf-track { position: relative; display: grid; grid-template-columns: 1fr 1fr; height: 20px; align-items: center; }
+        .wf-track::before {
+            content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px;
+            width: 1px; background: var(--border);
+        }
+        /* 2px gaps so touching segments read as separate quantities. */
+        .wf-neg { display: flex; justify-content: flex-end; gap: 2px; }
+        .wf-pos { display: flex; justify-content: flex-start; gap: 2px; }
+        .wf-seg { height: 16px; }
+        .wf-neg > :first-child { border-radius: 4px 0 0 4px; }
+        .wf-pos > :last-child { border-radius: 0 4px 4px 0; }
+        .wf-seg.new { background: var(--mv-new); }
+        .wf-seg.reactivation { background: var(--mv-reactivation); }
+        .wf-seg.expansion { background: var(--mv-expansion); }
+        .wf-seg.contraction { background: var(--mv-contraction); }
+        .wf-seg.churned { background: var(--mv-churned); }
+
+        /* Lifecycle timeline on a merchant's page. A rail with a dot per event,
+           rendered strictly in occurred_at order -- the header above it is
+           derived from these same rows, so the two cannot disagree. */
+        .tl { display: grid; gap: 0; margin: 4px 0 0; }
+        .tl-row {
+            display: grid; grid-template-columns: 132px 20px 1fr; gap: 12px;
+            align-items: start; padding: 7px 0;
+        }
+        .tl-when { font-size: 13px; color: var(--muted); font-family: var(--mono); }
+        /* The rail is drawn on the middle column so it runs behind every dot and
+           stops at the first and last row rather than overshooting the list. */
+        .tl-rail { position: relative; justify-self: center; width: 20px; height: 100%; }
+        .tl-rail::before {
+            content: ""; position: absolute; left: 9px; top: -7px; bottom: -7px;
+            width: 2px; background: var(--border);
+        }
+        .tl-row:first-child .tl-rail::before { top: 9px; }
+        .tl-row:last-child .tl-rail::before { bottom: calc(100% - 9px); }
+        .tl-dot {
+            position: absolute; left: 4px; top: 4px; width: 12px; height: 12px;
+            border-radius: 50%; background: var(--gone);
+            box-shadow: 0 0 0 3px var(--card);
+        }
+        .tl-dot.installed, .tl-dot.reinstalled, .tl-dot.subscribed,
+        .tl-dot.upgraded { background: var(--up); }
+        .tl-dot.uninstalled, .tl-dot.unsubscribed, .tl-dot.downgraded { background: var(--down); }
+        .tl-what { font-size: 14px; }
+        .tl-what .sub { display: block; }
+        /* A merchant's own words. Set apart so it reads as a quote rather than
+           as another field of the row above it. */
+        .verbatim {
+            border-left: 2px solid var(--border); padding: 2px 0 2px 10px;
+            margin: 6px 0 0; color: var(--ink-2); font-size: 13px;
+        }
+
+        /* retention heat cells */
+        .heat { font-family: var(--mono); font-size: 12.5px; text-align: center; border-radius: 4px; padding: 6px 0; min-width: 52px; }
+        .heat.hot { color: var(--heat-ink); }
+        .empty-state { max-width: 620px; }
+        .empty-state p { color: var(--ink-2); }
+
+        /* Animate the mark, never the container.
+           A reveal-on-scroll pass shipped here once and left Customers,
+           Retention and the whole Traffic page permanently blank: it set
+           opacity: 0 on cards and waited for an IntersectionObserver threshold
+           of 0.12, which a card taller than the viewport can never reach. So
+           the rule is not "no animation", it is that no element holding content
+           may start hidden, and there is no observer. Bars grow from zero
+           width; if the animation never runs, the bar is simply already full
+           width with its value beside it and the page looks finished. */
+        @media (prefers-reduced-motion: no-preference) {
+            @keyframes grow-x { from { transform: scaleX(0); } }
+            /* Gated on the .grow class, which the head script adds only when
+               the document is visible: a CSS animation in a background tab is
+               frozen at its first keyframe, so an ungated grow renders every
+               bar at zero width until someone looks at the tab. Measured, not
+               assumed. That is the same failure the reveal-on-scroll pass had,
+               arriving by a different road.
+               No animation-delay and no fill-mode either: a delayed bar has to
+               be pinned at scale 0 to avoid a flash, and anything pinned at
+               zero is a hidden container by another name. */
+            .grow .bar, .grow .wf-seg {
+                transform-origin: left center;
+                animation: grow-x .5s cubic-bezier(.22, .7, .3, 1);
+            }
+            .grow .wf-neg .wf-seg { transform-origin: right center; }
+
+            .confetti i { transition: transform .18s ease; }
+            .wordmark:hover .confetti i:nth-child(1) { transform: rotate(-24deg) translateY(-2px); }
+            .wordmark:hover .confetti i:nth-child(2) { transform: rotate(22deg) translateY(-3px); }
+            .wordmark:hover .confetti i:nth-child(3) { transform: rotate(-14deg) translateY(2px); }
+        }
+
+        footer {
+            max-width: 1240px; margin: 0 auto; padding: 0 28px 40px;
+            color: var(--muted); font-size: 12.5px; text-align: center;
+        }
+
+        /* Full-bleed art with the panel floating on it. Every gate page that
+           has art gets this; the file itself arrives as --cover-art on the
+           body, so one rule serves the sign-in screen and all three errors. */
+        body.cover {
+            /* The scrim is not decoration: neon lands in unpredictable places
+               and the panel has to stay legible wherever the crop puts it. */
+            background:
+                linear-gradient(rgba(8, 6, 14, .45), rgba(8, 6, 14, .68)),
+                var(--cover-art) center / cover no-repeat fixed;
+            min-height: 100vh;
+        }
+        /* Column so the panel can centre in the viewport while the footer
+           stays pinned under it. */
+        body.cover .content {
+            display: flex; flex-direction: column; min-height: 100vh;
+        }
+        /* Left, not centred. Every one of these frames puts its subject right
+           of centre -- the doorman, the bouncer, the figure at the door -- so a
+           centred panel sat on exactly the thing the picture is about. Below
+           900px there is no room to be choosy and it centres. */
+        body.cover main {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            /* main is normally a 1240px column centred with `margin: 0 auto`.
+               Auto margins on the cross axis switch off flex stretch, so it was
+               shrink-wrapping to the panel and re-centring it whatever
+               justify-content said. Full bleed needs the full width. */
+            width: 100%; max-width: none; margin: 0;
+        }
+        @media (min-width: 900px) {
+            body.cover main { justify-content: flex-start; padding-left: 5vw; }
+        }
+        body.cover .gate {
+            /* Not `margin: 0 auto`: auto margins beat justify-content and the
+               panel stayed centred. */
+            margin: 0; padding: 34px 34px 30px;
+            background: rgba(21, 17, 31, .52);
+            /* Fallback first: without backdrop-filter the panel is still a
+               readable translucent card, just not a frosted one. */
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, .13);
+            border-radius: 18px;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
+        }
+        /* The art is dark in both colour schemes, so this page cannot use the
+           theme tokens: in light mode --ink is near-black and would vanish.
+           These are the dark-mode values, pinned. */
+        body.cover, body.cover .gate h1 { color: #F3F0F9; }
+        body.cover .gate .wordmark { color: #FFFFFF; }
+        body.cover .gate p { color: #D8D2E6; }
+        body.cover footer { color: rgba(255, 255, 255, .5); }
+        @media (max-width: 560px) {
+            body.cover { background-attachment: scroll; }
+            body.cover .gate { padding: 26px 22px 22px; }
+        }
+    </style>
+    <!-- Arms the bar-grow animation, and only if this document is on screen
+         right now. In the head so the class is set before first paint; without
+         it the bars would paint full width and then jump to zero to animate.
+         If it never runs the page simply renders finished, which is the rule. -->
+    <script nonce="{{ request.state.nonce }}">
+        // "js" gates anything whose CSS hides content: the collapsed nav is
+        // only allowed to disappear behind the hamburger once we know there is
+        // a script to bring it back.
+        document.documentElement.classList.add("js");
+        // "grow" arms the bar animation, and only if this document is on screen
+        // right now. In the head so both land before first paint; without that
+        // the bars would paint full width and then jump to zero to animate.
+        if (!document.hidden) document.documentElement.classList.add("grow");
+    </script>
+</head>
+<body class="{% block bodyclass %}{% endblock %}"
+      style="{% block bodystyle %}{% endblock %}">
+    {#- The whole nav as data: href, active key, label, icon path, and the
+        sub-sections of that page. Sub-items only render under the page you are
+        on, the way the Shopify admin does it, so the column stays short. Each
+        one anchors to an id in that page's template; adding a sub-item means
+        adding the matching id. -#}
+    {% set NAV = [
+        ("/", "overview", "Overview",
+         '<path d="M3 10.5 10 4l7 6.5"/><path d="M5 9.5V16h10V9.5"/>',
+         [("MRR by month", "mrr"), ("What moved it", "movements"),
+          ("Money collected", "collected"),
+          ("Installs vs uninstalls", "activity"), ("Where customers are", "countries"),
+          ("Plan mix", "plans"), ("Why people leave", "reasons"),
+          ("Annotations", "annotations")]),
+        ("/customers", "customers", "Customers",
+         '<circle cx="8" cy="7.5" r="2.8"/><path d="M2.8 16.2a5.2 5.2 0 0 1 10.4 0"/><path d="M14 5.2a2.6 2.6 0 0 1 0 4.8"/><path d="M15.4 16.2a4.6 4.6 0 0 0-1.9-3.6"/>',
+         []),
+        ("/actions", "actions", "Actions",
+         '<path d="M3.5 6.5 5 8l2.5-2.8"/><path d="M3.5 13.5 5 15l2.5-2.8"/><path d="M10 7h7"/><path d="M10 14h7"/>',
+         ([("Paying, but gone quiet", "quiet")] if tracking else [])
+         + [("Ask for a review", "review"), ("Pitch the annual plan", "annual"),
+            ("Trial watch", "trial")]),
+        ("/reports/funnel", "funnel", "Funnel",
+         '<path d="M3 4h14l-5.2 6v5.4L8.2 17v-7z"/>',
+         [("Lifecycle funnel", "lifecycle"), ("Activation", "activation")]),
+        ("/reports/churn", "churn", "Churn",
+         '<path d="M3 5.5l5 5 3-2.6 6 5.6"/><path d="M17 10.5v3.5h-3.5"/>',
+         [("How long before they left", "timing"), ("Uninstall reasons", "reasons"),
+          ("In their own words", "verbatims"), ("Every uninstall", "all")]),
+        ("/reports/retention", "retention", "Retention",
+         '<rect x="3" y="3.5" width="14" height="13" rx="2"/><path d="M3 8h14"/><path d="M8 8v8.5"/>',
+         [("Installed retention", "installed"), ("Paying retention", "paying")]),
+        ("/reports/traffic", "traffic", "Traffic",
+         '<circle cx="10" cy="10" r="7"/><path d="M3 10h14"/><path d="M10 3a11 11 0 0 1 0 14a11 11 0 0 1 0-14z"/>',
+         [("Sessions and installs by month", "monthly"),
+          ("What GA4 missed", "reconciliation")]),
+    ] %}
+    {#- One row of the sidebar. The icon is decorative: every row keeps its
+        text label, so the picture never has to carry the meaning alone. -#}
+    {% macro navlink(href, key, label, path) %}
+    <a href="{{ href }}" {% if active == key %}aria-current="page"{% endif %}>
+        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">{{ path }}</svg>
+        <span>{{ label }}</span>
+    </a>
+    {% endmacro %}
+    {#- Emptied by the unauthenticated pages: a nav full of links you
+        cannot follow is worse than no nav. -#}
+    {% block sidebar %}
+    <aside class="sidebar">
+        <div class="side-top">
+            <a class="wordmark" href="/">
+                <span class="confetti"><i></i><i></i><i></i></span>
+                <span>{{ APP_NAME|replace(" ", "&nbsp;")|safe }} <small>Analytics</small></span>
+            </a>
+            <button type="button" class="hamburger" id="nav-toggle"
+                    aria-controls="sidenav" aria-expanded="false" aria-label="Menu">
+                <svg viewBox="0 0 20 20" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                     aria-hidden="true">
+                    <path d="M3 6h14M3 10h14M3 14h14"/>
+                </svg>
+            </button>
+        </div>
+        <nav id="sidenav">
+            {% for href, key, label, icon, subs in NAV %}
+            <a href="{{ href }}" {% if active == key %}aria-current="page"{% endif %}>
+                {#- The icon is a second read of the label, never a replacement:
+                    every row keeps its text. -#}
+                <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">{{ icon|safe }}</svg>
+                <span>{{ label }}</span>
+            </a>
+            {% if active == key and subs %}
+            <div class="subnav">
+                {% for text, anchor in subs %}<a href="{{ href }}#{{ anchor }}">{{ text }}</a>{% endfor %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </nav>
+        {#- Tips rather than documentation: the six things that stop someone
+            misreading a number or missing the feature that makes this useful
+            somewhere else. A <details> for the same reasons as the account
+            menu below: it opens with no JS and is keyboard-operable for free. -#}
+        <details class="help">
+            <summary>
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="none"
+                     stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                     stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6.2"/><path d="M6.3 6.1a1.8 1.8 0 113.1 1.2c-.6.5-1.4.8-1.4 1.7"/>
+                    <path d="M8 11.6h.01"/>
+                </svg>
+                <span class="who">Tips</span>
+                <svg class="caret" viewBox="0 0 16 16" width="12" height="12" fill="none"
+                     stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                     aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg>
+            </summary>
+            <div class="help-menu">
+                <p><strong>Copy MD</strong> copies this page as markdown. Paste it
+                into an AI agent and ask it about the numbers.</p>
+                <p>Every page has a markdown twin: <code>/index.md</code>,
+                <code>/reports/churn.md</code>, <code>/customers/&lt;domain&gt;.md</code>.</p>
+                <p><strong>Download JSON</strong>, on Overview, saves every dataset
+                at its widest window as one file. A twin mirrors a page; that file
+                is the archive.</p>
+                <p>The <strong>ⓘ</strong> beside a number says what it counts and
+                which table it comes from.</p>
+                <p><a href="/faq">Why don't these numbers match?</a> covers MRR
+                against cash, multi-select uninstall reasons, and GA4 against the
+                Partner API.</p>
+                <p>The strip on Overview says how fresh the numbers are.</p>
+                <p>No merchant contact details are stored, on purpose.</p>
+            </div>
+        </details>
+        <details class="acct">
+            <summary>
+                <span class="avatar" aria-hidden="true">{{ (user or "?")[0] }}</span>
+                <span class="who">{{ user or "Signed in" }}</span>
+                <svg class="caret" viewBox="0 0 16 16" width="12" height="12" fill="none"
+                     stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                     aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg>
+            </summary>
+            <div class="acct-menu">
+                {% if user %}
+                <a href="/auth/logout">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none"
+                         stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
+                         stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6.5 2.5H3.2v11h3.3"/><path d="M10 5l3 3-3 3"/><path d="M13 8H6.5"/>
+                    </svg>
+                    Sign out
+                </a>
+                {% endif %}
+            </div>
+        </details>
+    </aside>
+    {% endblock %}
+    <div class="content">
+    <main>
+        <!-- Floated rather than absolutely positioned: the page title flows
+             beside it and wraps if it ever gets long, so the two can never
+             overlap. The label is the accessible name, so the clipboard icon
+             is decoration. -->
+        {#- A block so the 404 can drop it: that page has no markdown twin, so
+            the button would only ever fail there. -#}
+        {% block pagehead %}
+        <div class="page-head">
+            <button type="button" id="copy-md" class="ghost">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none"
+                     stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <rect x="5.2" y="2.2" width="8.6" height="11.6" rx="1.6"/>
+                    <path d="M10.8 13.8H3.7a1.5 1.5 0 0 1-1.5-1.5V4.2"/>
+                </svg>
+                <span>Copy MD</span>
+            </button>
+            {#- Overview only. Copy MD is per-page because each page has a twin;
+                this file is the whole dashboard, so one copy of it belongs on
+                the page that is already the front door rather than repeated on
+                seven pages that would each hand over the identical file. A
+                plain link with `download`: no fetch, no script, no CSP
+                exception, and the browser writes the file itself. -#}
+            {% if active == "overview" %}
+            <a href="/export.json" download class="ghost">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none"
+                     stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
+                     stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 2.4v7.2"/>
+                    <path d="M5 7l3 2.8L11 7"/>
+                    <path d="M2.8 12.2v1.4h10.4v-1.4"/>
+                </svg>
+                <span>Download JSON</span>
+            </a>
+            {% endif %}
+        </div>
+        {% endblock %}
+        {% block content %}{% endblock %}
+    </main>
+    <script nonce="{{ request.state.nonce }}">
+        // Hamburger. Only reachable in the collapsed layout, where the CSS has
+        // hidden the nav; aria-expanded is the state, the class is the paint.
+        document.getElementById("nav-toggle").addEventListener("click", (event) => {
+            const nav = document.getElementById("sidenav");
+            const open = nav.classList.toggle("open");
+            event.currentTarget.setAttribute("aria-expanded", String(open));
+        });
+
+        // Copies this page's markdown mirror (frontmatter + prose + JSON) for
+        // pasting into an agent. The URL is derived from the path rather than
+        // templated in, so no route has to know about the button.
+        // Optional chaining because the 404 drops the button: without it, the
+        // throw would take the rest of this script with it.
+        document.getElementById("copy-md")?.addEventListener("click", async (event) => {
+            const button = event.currentTarget;
+            const path = location.pathname === "/" ? "/index.md"
+                       : location.pathname.replace(/\/$/, "") + ".md";
+            // Only the label span changes: writing to button.textContent would
+            // delete the icon along with the text.
+            const label = button.querySelector("span");
+            const done = (text) => {
+                label.textContent = text;
+                setTimeout(() => { label.textContent = "Copy MD"; }, 1800);
+            };
+            try {
+                const response = await fetch(path, {headers: {"Accept": "text/markdown"}});
+                if (!response.ok) throw new Error(response.status);
+                await navigator.clipboard.writeText(await response.text());
+                done("Copied");
+            } catch (error) {
+                console.error("copy failed", error);
+                done("Copy failed");
+            }
+        });
+
+        // Count the stat tiles up to the number that is already in the HTML.
+        // The server rendered the final value, so this only animates toward
+        // what is on the page: with JS off, or if any of this throws, the tile
+        // reads correctly from the first frame. Same rule as the bars.
+        (function countUp() {
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+            const SHAPE = /^(\D*)([\d,]+(?:\.\d+)?)(\D*)$/;
+            document.querySelectorAll(".stat .num").forEach((tile) => {
+                // First text node only, so a trailing <small> ("/mo") is left alone.
+                const node = [...tile.childNodes].find(
+                    (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+                if (!node) return;
+                const shape = SHAPE.exec(node.textContent.trim());
+                if (!shape) return;
+                const [, prefix, digits, suffix] = shape;
+                const target = parseFloat(digits.replace(/,/g, ""));
+                if (!isFinite(target) || target === 0) return;
+                const decimals = (digits.split(".")[1] || "").length;
+                const format = (value) => prefix + value.toLocaleString("en-US", {
+                    minimumFractionDigits: decimals,
+                    maximumFractionDigits: decimals,
+                    useGrouping: digits.includes(","),
+                }) + suffix;
+
+                const started = performance.now(), duration = 620;
+                const frame = (now) => {
+                    const t = Math.min(1, (now - started) / duration);
+                    // Ease out, so it lands on the number instead of stopping at it.
+                    node.textContent = format(target * (1 - Math.pow(1 - t, 3)));
+                    if (t < 1) requestAnimationFrame(frame);
+                    else node.textContent = format(target);
+                };
+                requestAnimationFrame(frame);
+            });
+        })();
+
+        // Anyone who opens devtools on this dashboard is looking for the data,
+        // not the DOM. Hand them the markdown twin of whatever they are on.
+        console.log("Every page here has a markdown twin. This one: "
+            + (location.pathname === "/" ? "/index.md"
+               : location.pathname.replace(/\/$/, "") + ".md"));
+    </script>
+    <!-- How fresh the numbers are is on Overview's ops strip, which reads the
+         real poll interval. Repeating it here just gives it somewhere to go
+         stale, which it did. What belongs here is the one fact that is true of
+         the page you are on and nowhere else: what it cost to build. Every page
+         runs its own set of aggregates, so this is where a query that has grown
+         with the data shows up first. -->
+    {% set ms = render_ms(request) %}
+    <footer>{% if ms %}Rendered in {{ ms }} ms{% endif %}</footer>
+    </div>
+</body>
+</html>

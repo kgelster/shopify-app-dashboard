@@ -1,0 +1,19 @@
+tests/
+.venv/
+.git/
+.github/
+scripts/
+.env
+.env.*
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+docs/
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+# Never ship a local backfill export to a remote builder. The Dockerfile does
+# not COPY it, but without this line it is still uploaded as build context.
+data/

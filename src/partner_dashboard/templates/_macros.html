@@ -1,0 +1,69 @@
+{#- Shared pieces. Imported rather than inherited: a macro defined in base.html
+    is only reliably visible inside base.html's own body, and these are used
+    from child blocks. METRICS, COMPARE_LABEL and signed() are environment
+    globals, so an import without context still sees them. -#}
+
+{#- The info affordance beside a number. A <details> for the same reasons the
+    Tips and account menus are: it opens with no JavaScript, it is
+    keyboard-operable for free, and there is no state it can get stuck in.
+    Everything it shows comes from partner_dashboard.metrics, so a tile physically cannot
+    display a number it has no definition for -- METRICS[key] would raise. -#}
+{% macro defn(key) %}
+{% set m = METRICS[key] %}
+<details class="defn">
+    <summary aria-label="What {{ m.name }} measures">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none"
+             stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v4"/><path d="M8 4.9h.01"/>
+        </svg>
+    </summary>
+    <div class="defn-card">
+        <p class="defn-name">{{ m.name }}</p>
+        <p>{{ m.definition }}</p>
+        <p class="defn-rule">{{ m.rule }}</p>
+        <p class="defn-src">Source: {{ m.source }}</p>
+    </div>
+</details>
+{% endmacro %}
+
+{#- One headline tile: label, definition, number, and what it was before.
+    `compare` is a row out of stats.overview_comparison, or nothing when the
+    figure has nothing honest to compare against. -#}
+{% macro stat(key, value, tone="", extra="", compare=none) %}
+{% set m = METRICS[key] %}
+<div class="card stat{% if tone %} {{ tone }}{% endif %}">
+    <div class="label">{{ m.name }} {{ defn(key) }}</div>
+    {#- The nbsp lives here rather than in the caller's string: passed in, Jinja
+        would escape the entity and the tile would read "&nbsp;/ $19 ARPU". -#}
+    <div class="num">{{ value }}{% if extra %}<small>&nbsp;{{ extra }}</small>{% endif %}</div>
+    {% if compare %}
+    {#- Direction is only good or bad news when the metric says which way is
+        which. Uninstalls going up is not an achievement, and nothing here
+        should imply it is. -#}
+    {% set rose = compare.change > 0 %}
+    {% set fell = compare.change < 0 %}
+    <div class="delta
+        {%- if m.better and ((rose and m.better == 'up') or (fell and m.better == 'down')) %} good
+        {%- elif m.better and ((rose and m.better == 'down') or (fell and m.better == 'up')) %} bad{% endif %}">
+        <span class="delta-num">{{ signed(compare.change, m.unit) }}</span>
+        <span class="delta-when">{{ COMPARE_LABEL[m.kind] }}</span>
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{#- A window picker. A plain GET form with a submit button rather than an
+    onchange handler: the CSP has no unsafe-inline for scripts, and a control
+    that only works with JavaScript is a control that silently stops working. -#}
+{% macro window_form(name, current, choices, unit, all_label=none) %}
+<form class="filters range" method="get">
+    <select name="{{ name }}" aria-label="Time range">
+        {% if all_label %}<option value="">{{ all_label }}</option>{% endif %}
+        {% for value in choices %}
+        <option value="{{ value }}" {% if current == value %}selected{% endif %}>
+            Last {{ value }} {{ unit }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Show</button>
+</form>
+{% endmacro %}

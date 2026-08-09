@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Why don't these numbers match?</h1>
+<p class="sub">Almost every question this dashboard produces is a version of that one, and almost
+every answer is that the two numbers measure different things and are both right. The questions
+come from partner_dashboard/faq.py and render identically here and at <code>/faq.md</code>.</p>
+
+{% for question, paragraphs in faq %}
+<div class="card">
+    <h2>{{ question }}</h2>
+    {% for paragraph in paragraphs %}
+    <p{% if not loop.first %} class="sub"{% endif %}>{{ paragraph }}</p>
+    {% endfor %}
+</div>
+{% endfor %}
+
+<p class="sub">Every number on every page carries its own definition behind the
+<strong>&#9432;</strong> beside it: what it counts, the exact rule, and which table is the truth
+for it.</p>
+{% endblock %}

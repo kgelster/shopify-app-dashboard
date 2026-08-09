@@ -1,0 +1,70 @@
+name: CI
+
+# The suite plus two scanners on every push and PR, so the security posture is
+# enforced going forward rather than re-checked by hand. Deploys stay manual; a
+# red run here is pressure to fix before the next one, not an auto-block.
+on:
+  push:
+  pull_request:
+
+# Read-only by default. Nothing here writes to the repository, and a public fork
+# should not inherit a broadly-scoped token.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: partner_dashboard_test
+          # trust + PGUSER=postgres below: the test fixtures hardcode a
+          # userless postgresql://localhost/partner_dashboard_test URL, so libpq connects as
+          # the postgres role with no password.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://localhost:5432/partner_dashboard_test
+      PGUSER: postgres
+      NO_SCHEDULER: "1"
+      # tests/conftest.py sets the required Settings fields before any
+      # import, so these are belt and braces rather than load-bearing. Kept
+      # because they document what a bare environment needs.
+      USAGE_INGEST_TOKEN: ci-ingest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # gitleaks scans the full history
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      # Fail on a known CVE in the locked dependency set. The lock is frozen for
+      # reproducible builds; this is what tells us when frozen has gone stale.
+      - name: pip-audit
+        run: uv run --with pip-audit pip-audit
+      # Secret scan over full history. The gitleaks tool is MIT-licensed and
+      # free to run directly; only the wrapper action needs a license in some
+      # cases, so call the CLI.
+      - name: gitleaks
+        run: >-
+          docker run --rm -v "${{ github.workspace }}:/repo"
+          ghcr.io/gitleaks/gitleaks:latest
+          detect --source=/repo --redact --exit-code=1

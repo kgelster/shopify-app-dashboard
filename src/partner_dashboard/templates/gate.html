@@ -1,0 +1,31 @@
+{#- The unauthenticated shell. Extends base.html so it inherits every design
+    token, the fonts, the CSP nonce and the render-time footer, and empties the
+    sidebar block: a nav full of links you cannot follow is worse than no nav.
+
+    A signed-in reader keeps the sidebar, because a 404 is a place to navigate
+    away from and the links work for them. That is the only difference, so the
+    two states share one template rather than drifting apart as two. -#}
+{% extends "base.html" %}
+{#- `art` drives the whole treatment: it becomes the page background rather
+    than a picture inside the panel, so one mechanism covers the sign-in screen
+    and all three errors. An inline custom property rather than a class per
+    file, because the alternative was four near-identical CSS rules differing
+    only in a URL. Inline style *attributes* are already how the charts set bar
+    widths, and a nonce cannot cover them, which is why the CSP keeps
+    style-src 'unsafe-inline'. -#}
+{% block bodyclass %}{% if art %}cover{% endif %}{% endblock %}
+{% block bodystyle %}{% if art %}--cover-art: url('{{ art }}'){% endif %}{% endblock %}
+{% block sidebar %}{% if signed_in %}{{ super() }}{% endif %}{% endblock %}
+{#- No Copy MD anywhere in here: none of these pages has a markdown twin. -#}
+{% block pagehead %}{% endblock %}
+{% block content %}
+<div class="gate">
+    {% if not signed_in %}
+    <a class="wordmark" href="/">
+        <span class="confetti"><i></i><i></i><i></i></span>
+        <span>{{ APP_NAME|replace(" ", "&nbsp;")|safe }} <small>Analytics</small></span>
+    </a>
+    {% endif %}
+    {% block gate %}{% endblock %}
+</div>
+{% endblock %}

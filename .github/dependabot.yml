@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Python deps. The `uv` ecosystem updates uv.lock (the frozen source of truth
+  # the Dockerfile builds from); the older `pip` ecosystem would not touch it.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

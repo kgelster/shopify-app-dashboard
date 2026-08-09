@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<h1>Actions</h1>
+<p class="sub">Call sheets, recomputed on every page load. Nothing here writes anywhere:
+work the lists, then come back.</p>
+
+{% if tracking %}
+<div class="card">
+    <h2 id="quiet">Paying, but gone quiet &middot; {{ at_risk|length }}</h2>
+    <p class="sub">Active subscribers whose offers have shown to nobody in 14 days. They are
+    still being billed for an app that is serving nothing, and they will work that out on their
+    own eventually. Quietest first.</p>
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr><th>Shop</th><th>Domain</th><th class="num">MRR</th><th class="num">Last impression</th></tr>
+            </thead>
+            <tbody>
+                {% for r in at_risk %}
+                <tr>
+                    <td>{% if r.domain %}<a href="/customers/{{ r.domain }}">{{ r.shop }}</a>{% else %}{{ r.shop }}{% endif %}</td>
+                    <td class="sub">{{ r.domain or "" }}</td>
+                    <td class="num">${{ "%.0f"|format(r.monthly_amount) }}</td>
+                    <td class="num">{{ r.days_quiet }} days ago</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">Every paying shop has served an offer in the last 14 days.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2 id="review">Ask for a review &middot; {{ review|length }}</h2>
+    <p class="sub">Installed, paying, past 30 days, and not already a reviewer. Reviews are the
+    cheapest acquisition lever a small app has, and these merchants have used it long enough
+    to mean what they say. Longest-tenured first. Merchants already on the
+    {% if APP_LISTING_URL %}<a href="{{ APP_LISTING_URL }}">public listing</a>{% else %}public
+    listing{% endif %} are excluded via <code>shops.reviewed_at</code>, which is maintained by
+    hand: the Partner API does not report reviews. No contact name or address: contact details are
+    deliberately not stored, because the only sources for them name agency staff rather than the
+    merchant.</p>
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr><th>Shop</th><th>Country</th><th class="num">Installed</th><th class="num">Paying since</th><th class="num">MRR</th></tr>
+            </thead>
+            <tbody>
+                {% for r in review %}
+                <tr>
+                    <td>{% if r.domain %}<a href="/customers/{{ r.domain }}">{{ r.shop }}</a>{% else %}{{ r.shop }}{% endif %}<div class="sub">{{ r.domain or "" }}</div></td>
+                    <td class="sub">{{ r.country or "" }}</td>
+                    <td class="num sub">{{ r.installed_at.strftime("%b %-d, %Y") if r.installed_at else "" }}</td>
+                    <td class="num">{{ r.since.strftime("%b %-d, %Y") }}<div class="sub">{{ r.days }} days</div></td>
+                    <td class="num">${{ "%.0f"|format(r.mrr) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5">Nobody has been paying for 30 days yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if review %}
+    <h2>Copy the list</h2>
+    <textarea class="copyable" readonly rows="4">{% for r in review %}{{ r.domain or r.shop }}
+{% endfor %}</textarea>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2 id="annual">Pitch the annual plan &middot; {{ annual|length }}</h2>
+    <p class="sub">On a monthly plan and past three months. Every yes is a year of
+    months of cash up front and one fewer monthly chance to cancel.</p>
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr><th>Shop</th><th>Domain</th><th>Country</th><th class="num">On monthly for</th></tr>
+            </thead>
+            <tbody>
+                {% for r in annual %}
+                <tr>
+                    <td>{% if r.domain %}<a href="/customers/{{ r.domain }}">{{ r.shop }}</a>{% else %}{{ r.shop }}{% endif %}</td>
+                    <td class="sub">{{ r.domain or "" }}</td>
+                    <td class="sub">{{ r.country or "" }}</td>
+                    <td class="num">{{ r.days }} days</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">No monthly subscriber has passed three months yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-head">
+        <h2 id="trial">Trial watch &middot; {{ trial|length }}</h2>
+        {#- The only window on this page. The other two lists are business rules
+            rather than view windows: widening those changes who belongs on the
+            call sheet, not how much of it you can see. -#}
+        {{ ui.window_form("trial_days", trial_days, trial_choices, "days") }}
+    </div>
+    <p class="sub">Installed in the last {{ trial_days }} days and still not paying. Oldest first: those are
+    the ones closest to deciding. This is a proxy, not activation data. The Partner API carries
+    no product usage at all, so "installed and silent" is the best signal available until the
+    app itself reports events.</p>
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr><th>Shop</th><th>Domain</th><th>Country</th><th class="num">Installed</th></tr>
+            </thead>
+            <tbody>
+                {% for r in trial %}
+                <tr>
+                    <td>{% if r.domain %}<a href="/customers/{{ r.domain }}">{{ r.shop }}</a>{% else %}{{ r.shop }}{% endif %}</td>
+                    <td class="sub">{{ r.domain or "" }}</td>
+                    <td class="sub">{{ r.country or "" }}</td>
+                    <td class="num">{{ r.days }} days ago</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">Nobody installed in the last {{ trial_days }} days is still unsubscribed.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

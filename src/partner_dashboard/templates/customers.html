@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Customers</h1>
+<form class="filters" hx-get="/customers" hx-target="#customers-results" hx-select="#customers-results"
+      hx-swap="outerHTML" hx-push-url="true">
+    <select name="install_state">
+        <option value="">Installed and uninstalled</option>
+        {% for s in facets.states %}
+        <option value="{{ s }}" {% if s == install_state %}selected{% endif %}>{{ s|capitalize }}</option>
+        {% endfor %}
+    </select>
+    <select name="industry">
+        <option value="">All industries</option>
+        {% for i in facets.industries %}
+        <option value="{{ i }}" {% if i == industry %}selected{% endif %}>{{ i }}</option>
+        {% endfor %}
+    </select>
+    <select name="country">
+        <option value="">All countries</option>
+        {% for c in facets.countries %}
+        <option value="{{ c }}" {% if c == country %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+    </select>
+    {#- Live subscriptions only, which is what the plan-mix bars on Overview
+        count and therefore what they link to. -#}
+    <select name="plan">
+        <option value="">All plans</option>
+        {% for value, label in plan_choices %}
+        <option value="{{ value }}" {% if value == plan %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    <input type="search" name="search" value="{{ search }}" placeholder="Search shop or domain">
+    <button type="submit">Filter</button>
+</form>
+<div id="customers-results">
+<div class="table-card">
+    <table>
+        <thead>
+            <tr>
+                <th>Shop</th>
+                <th>Domain</th>
+                <th>Country</th>
+                <th>Industry</th>
+                <th>State</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>{% if row.shop_domain %}<a href="/customers/{{ row.shop_domain }}">{{ row.shop_name or row.shop_domain }}</a>{% else %}{{ row.shop_name or "" }}{% endif %}</td>
+                <td class="sub">{{ row.shop_domain or "" }}</td>
+                <td>{{ row.country or "" }}</td>
+                <td class="sub">{{ row.industry or "" }}</td>
+                <td>{% if row.install_state %}<span class="pill {{ row.install_state }}">{{ row.install_state }}</span>{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">No shops match these filters. The search box matches shop name and
+                domain, not industry.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{# The pager lives inside #customers-results so an HTMX swap replaces the page
+   numbers along with the rows. Links carry the active filters. #}
+<div class="pager" hx-target="#customers-results" hx-select="#customers-results"
+     hx-swap="outerHTML" hx-push-url="true">
+    <span class="sub">
+        {% if total %}{{ first_row }}&ndash;{{ last_row }} of {{ total }}{% else %}0 of 0{% endif %}
+    </span>
+    {% if pages > 1 %}
+    <span class="pager-links">
+        {% if page > 1 %}
+        <a href="/customers?{{ base_qs }}page={{ page - 1 }}"
+           hx-get="/customers?{{ base_qs }}page={{ page - 1 }}">&larr; Previous</a>
+        {% else %}<span class="disabled">&larr; Previous</span>{% endif %}
+        <span class="sub">Page {{ page }} of {{ pages }}</span>
+        {% if page < pages %}
+        <a href="/customers?{{ base_qs }}page={{ page + 1 }}"
+           hx-get="/customers?{{ base_qs }}page={{ page + 1 }}">Next &rarr;</a>
+        {% else %}<span class="disabled">Next &rarr;</span>{% endif %}
+    </span>
+    {% endif %}
+</div>
+</div>
+{% endblock %}

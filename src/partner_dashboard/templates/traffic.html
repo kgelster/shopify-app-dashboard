@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+<h1>Traffic</h1>
+
+{% if not summary.sessions %}
+<div class="card empty-state">
+    <h2>No traffic data yet</h2>
+    <p>This page reads {% if GA4_PROPERTY_ID %}GA4 property {{ GA4_PROPERTY_ID }}{% else %}a GA4
+    property{% endif %}, the App Store listing stream. Either GA4_PROPERTY_ID is unset, the sync
+    hasn't run yet, or the service account has lost access to the property.</p>
+</div>
+{% else %}
+
+<div class="card-head">
+    <h2>Last {{ days }} days</h2>
+    {#- One window for the tiles, the reconciliation and the four breakdowns, so
+        every rate on this page is computed over the traffic it describes. -#}
+    {{ ui.window_form("days", days, day_choices, "days") }}
+</div>
+
+<div class="cards">
+    {{ ui.stat("sessions", summary.sessions) }}
+    {{ ui.stat("add_app_clicks", summary.add_app_clicks,
+               extra=summary.click_rate ~ "%") }}
+    {{ ui.stat("listing_installs", summary.installs, tone="up") }}
+    {{ ui.stat("install_rate", summary.install_rate ~ "%") }}
+    {{ ui.stat("click_to_install", summary.click_to_install ~ "%") }}
+    {{ ui.stat("ad_clicks", summary.ad_clicks) }}
+</div>
+
+<div class="card">
+    <h2 id="monthly">Listing sessions and installs by month</h2>
+    <div class="legend">
+        <span><i style="background: var(--gone)"></i>Sessions</span>
+        <span><i style="background: var(--up)"></i>Installs</span>
+    </div>
+    {% for m in monthly %}
+    <div class="bar-row">
+        <span class="bar-label">{{ m.label }}</span>
+        <span class="bar-pair">
+            <span class="bar-track"><span class="bar gone" style="width: {{ 100 * m.sessions / monthly_max }}%"></span></span>
+            <span class="bar-track"><span class="bar" style="width: {{ 100 * m.installs / monthly_max }}%"></span></span>
+        </span>
+        <span class="bar-val">{{ m.installs }} / {{ m.sessions }}</span>
+    </div>
+    {% endfor %}
+    <p class="sub">Installs here are the listing's own <span style="font-family: var(--mono); font-size: 12px;">shopify_app_install</span>
+    event, which Shopify sends server-side.</p>
+
+    <h2 id="reconciliation">How much of this GA4 never saw</h2>
+    <p class="sub">Over the same {{ reconciliation.days }} days, GA4 recorded
+    <strong>{{ reconciliation.ga4_installs }}</strong> installs and the Partner API recorded
+    <strong>{{ reconciliation.partner_installs }}</strong>.
+    {%- if reconciliation.gap > 0 %}
+    <strong>{{ reconciliation.gap }} real installs never fired the GA4 event</strong>, or
+    {{ reconciliation.missed_pct }}% of them. The Partner API is the truth here, so the gap is
+    measurement loss, not lost merchants: consent banners, ad and tracking blockers, and EU traffic
+    all suppress the browser event while the install still happens. Every conversion rate above is
+    computed on the GA4 side alone, so read them as a floor.
+    {%- elif reconciliation.gap < 0 %}
+    GA4 counted {{ -reconciliation.gap }} more than actually installed, which happens when the event
+    fires and the merchant then abandons the permissions screen. The rates above are an optimistic
+    read.
+    {%- else %}
+    The two agree exactly, which is unusual and worth a second look before trusting it.
+    {%- endif %}</p>
+</div>
+
+<div class="grid-2">
+    {% for key, title in [("channel", "Channel"), ("source", "Source"), ("country", "Country"), ("language", "Language")] %}
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>{{ title }}</th>
+                    <th class="num">Sessions</th>
+                    <th class="num">Installs</th>
+                    <th class="num">Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in breakdowns[key] %}
+                <tr>
+                    <td>{{ row.value or "(not set)" }}</td>
+                    <td class="num">{{ row.sessions }}</td>
+                    <td class="num">{{ row.installs }}</td>
+                    <td class="num">{{ row.rate }}%</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="sub">No sessions in this window.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</div>
+
+<p class="sub">Last {{ days }} days, from GA4 property {{ GA4_PROPERTY_ID }}. Data begins
+{{ summary.first_date.strftime("%b %-d, %Y") if summary.first_date else "n/a" }}
+and runs through {{ summary.last_date.strftime("%b %-d, %Y") if summary.last_date else "n/a" }}.</p>
+{% endif %}
+{% endblock %}

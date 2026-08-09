@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Funnel</h1>
+
+<div class="grid-2">
+    <div class="card">
+        <h2 id="lifecycle">Lifecycle funnel, all time</h2>
+        {% for stage in funnel %}
+        <div class="bar-row">
+            <span class="bar-label">{{ stage.label }}</span>
+            <span class="bar-track"><span class="bar" style="width: {{ stage.pct }}%"></span></span>
+            <span class="bar-val">{{ stage.count }} <span class="sub">({{ stage.pct }}%)</span></span>
+        </div>
+        {% endfor %}
+        <p class="sub">Percentages are relative to every shop that ever installed.</p>
+    </div>
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Install month</th>
+                    <th class="num">Installs</th>
+                    <th class="num">Subscribed</th>
+                    <th class="num">Conversion</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in monthly %}
+                <tr>
+                    <td>{{ m.label }}</td>
+                    <td class="num">{{ m.installs }}</td>
+                    <td class="num">{{ m.converted }}</td>
+                    <td class="num">{{ m.rate }}%</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="sub">No installs in the window yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if tracking %}
+<div class="cards">
+    <div class="card stat">
+        <div class="label">Built an offer</div>
+        <div class="num">{{ activation_summary.rate }}<small>%</small></div>
+    </div>
+    <div class="card stat">
+        <div class="label">Median time to first offer</div>
+        <div class="num">{% if activation_summary.median_hours is not none %}{{ activation_summary.median_hours }}<small>&nbsp;hours</small>{% else %}&mdash;{% endif %}</div>
+    </div>
+    <div class="card stat down">
+        <div class="label">Installed, never built one</div>
+        <div class="num">{{ activation_summary.never }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 id="cohorts">Activation by install cohort</h2>
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Install month</th>
+                    <th class="num">Cohort</th>
+                    <th class="num">Offer in 48h</th>
+                    <th class="num">Offer in 7d</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in activation %}
+                <tr>
+                    <td>{{ c.label }}</td>
+                    <td class="num">{{ c.cohort }}</td>
+                    <td class="num">{{ c.rate_48h }}% <span class="sub">({{ c.within_48h }})</span></td>
+                    <td class="num">{{ c.rate_7d }}% <span class="sub">({{ c.within_7d }})</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="sub">No cohort has installed since tracking started.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="sub">Counts only the {{ activation_summary.eligible }} shops that installed after
+    the app started reporting usage. An earlier shop has no first-offer event to find, and would
+    otherwise read as a merchant who never activated.</p>
+</div>
+{% else %}
+<div class="card">
+    <h2 id="activation">Activation</h2>
+    <p class="sub">Nothing has arrived yet. The Partner API knows a shop installed and that it
+    pays, and nothing about whether anyone ever built an offer, so activation has to be reported
+    by the app itself. This section fills in on the first event: what share of each install
+    cohort built an offer within 48 hours and within 7 days, and how long the median merchant
+    took. Contract: <code>docs/usage-events-integration.md</code>.</p>
+</div>
+{% endif %}
+
+<p class="sub">Why merchants leave, how long they stayed, and what they said on the way out
+live on <a href="/reports/churn">Churn</a>.</p>
+{% endblock %}
