@@ -40,7 +40,7 @@ jobs:
       # because they document what a bare environment needs.
       USAGE_INGEST_TOKEN: ci-ingest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -51,7 +51,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0            # gitleaks scans the full history
       - uses: astral-sh/setup-uv@v6
