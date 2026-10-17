@@ -69,7 +69,8 @@ def test_overview_arpu_and_churn(db):
     _shop(db, "s3", install_state="uninstalled")
     _sub(db, "c1", "s1", Decimal("19.00"), "2026-01-01Z")
     _sub(db, "c2", "s2", Decimal("15.83"), "2026-01-01Z")
-    _uninstall_event(db, "s3", "2026-08-01T00:00:00Z")
+    # Relative to now: overview_stats only counts uninstalls from the last 30 days.
+    _uninstall_event(db, "s3", (datetime.now(timezone.utc) - timedelta(days=5)).isoformat())
     db.commit()
 
     stats = overview_stats(db)
